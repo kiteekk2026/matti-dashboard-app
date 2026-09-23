@@ -549,15 +549,21 @@ Go to **Authentication → Sign In / Providers → GitHub**, turn it on, and pas
 
 There's no `config.toml` or `supabase/.env` in production. **The dashboard is where production settings live.**
 
-**3. Allow your app's URLs.**
-Go to **Authentication → URL Configuration**:
+**3. Tell Supabase your app's URL. (Required: login fails without this.)**
 
-- **Site URL:** `https://<your-app>.vercel.app`
-- **Redirect URLs:** add
-  - `https://<your-app>.vercel.app/**`
-  - `https://*-<your-vercel-team>.vercel.app/**` (optional; lets Vercel preview deployments log in too)
+Three services are involved, and each one needs to know a different URL. Mixing them up is the most common mistake in this chapter:
 
-If the URL your app sends as `redirectTo` isn't on this list, Supabase ignores it and sends users to the Site URL instead. They land on the homepage without being logged in.
+| Where | Setting | Value | Why |
+|---|---|---|---|
+| **Supabase** dashboard → **Authentication → URL Configuration** | **Site URL** | `https://<your-app>.vercel.app` | Where Supabase sends users when it doesn't accept the requested redirect URL. **The default is `http://localhost:3000`, so you must change it.** |
+| **Supabase** dashboard → **Authentication → URL Configuration** | **Redirect URLs** → **Add URL** | `https://<your-app>.vercel.app/**` | The allow list. After login, Supabase sends users back to `/auth/callback` only if that URL matches an entry here. |
+| **Supabase** dashboard → **Authentication → URL Configuration** | **Redirect URLs** → **Add URL** (optional) | `https://*-<your-vercel-team>.vercel.app/**` | Lets Vercel preview deployments log in too. |
+| **GitHub** → Settings → Developer settings → OAuth Apps → app #2 | **Authorization callback URL** | `https://<project-ref>.supabase.co/auth/v1/callback` | You set this in step 1. It points to **Supabase**, never to your Vercel URL. GitHub only talks to Supabase. |
+| **Vercel** | *(nothing)* | — | The app builds the callback URL from the address the request came in on, so no URL setting is needed. Vercel only needs the env vars from step 4. |
+
+Click **Save** in Supabase. The change takes effect immediately, with no redeploy.
+
+> **Symptom if you skip this:** you click **Continue with GitHub**, approve on GitHub, and your production site sends you to **`http://localhost:3000`**. Supabase didn't find your Vercel URL on the allow list, so it used the Site URL, which is still the default.
 
 **4. Add environment variables in Vercel.**
 Go to **Vercel → your project → Settings → Environment Variables**:
@@ -625,7 +631,8 @@ Open DevTools → **Application → Cookies**. You'll see a cookie named `sb-<so
 |---|---|---|
 | GitHub says **"The redirect_uri is not associated with this application"** | The callback URL in the GitHub OAuth app doesn't match Supabase's | Local: `http://127.0.0.1:<API port>/auth/v1/callback`. Prod: `https://<project-ref>.supabase.co/auth/v1/callback`. Check the port with `npx supabase status` |
 | The GitHub login URL shows `client_id=env%28SUPABASE_AUTH...` | The local stack didn't find your credentials | Put them in `supabase/.env`, then run `npx supabase stop && npx supabase start` |
-| After GitHub you land on the **homepage**, logged out | Your app's URL isn't on the Supabase redirect allow list | Add it under `additional_redirect_urls` (local) or **URL Configuration → Redirect URLs** (prod) |
+| Production sends you to **`http://localhost:3000`** after GitHub login | Supabase **Site URL** is still the default and your Vercel URL isn't on the allow list | Supabase dashboard → **Authentication → URL Configuration**: set Site URL and add `https://<your-app>.vercel.app/**` (step 10B.3) |
+| Locally, you land on the homepage logged out after GitHub login | Your local app URL isn't in the redirect allow list | Add it to `additional_redirect_urls` in `supabase/config.toml`, then restart the stack |
 | **"GitHub sign-in failed."** on the login page | `/auth/callback` couldn't exchange the code | Open the same browser you started the login in; check the Supabase Auth logs |
 | **"Unsupported provider: provider is not enabled"** | GitHub isn't enabled | Local: `enabled = true` in `config.toml`, then restart. Prod: turn it on in the dashboard |
 | Works locally but not on Vercel | Env vars missing, or no redeploy after adding them | Add both `NEXT_PUBLIC_SUPABASE_*` vars and **redeploy** |
