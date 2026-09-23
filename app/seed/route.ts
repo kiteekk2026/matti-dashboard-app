@@ -2,7 +2,9 @@ import bcrypt from 'bcrypt';
 import postgres from 'postgres';
 import { invoices, customers, revenue, users } from '../lib/placeholder-data';
 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+const sql = postgres(process.env.POSTGRES_URL!, {
+  ssl: process.env.POSTGRES_URL?.includes('127.0.0.1') ? false : 'require',
+});
 
 async function seedUsers() {
   await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
@@ -109,6 +111,11 @@ export async function GET() {
       seedInvoices(),
       seedRevenue(),
     ]);
+
+    // Block Data API access; the app queries these tables as postgres.
+    for (const table of ['users', 'customers', 'invoices', 'revenue']) {
+      await sql`ALTER TABLE ${sql(table)} ENABLE ROW LEVEL SECURITY`;
+    }
 
     return Response.json({ message: 'Database seeded successfully' });
   } catch (error) {
